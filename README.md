@@ -87,6 +87,11 @@ cd frontend && npm test    # formatação pt-BR e presets de período
 | `TS_AUTHKEY` | Chave do Tailscale, usada só no primeiro boot (seção 4) |
 | `TS_HOSTNAME` | Nome do nó: vira `https://<TS_HOSTNAME>.<tailnet>.ts.net` |
 | `TRUST_PROXY` | Em produção o compose já define (2 proxies: Tailscale e Caddy) |
+| `SYNC_DAILY_OPS_BUDGET` | Operações/dia que o dashboard pode gastar na Google Ads API (padrão 350; cota dividida com o KiipitADS) |
+| `INTERNAL_API_TOKEN` | Token da API interna usada pelo KiipitADS (`openssl rand -hex 32`). Vazio desliga a integração |
+| `PUBLIC_URL` | Endereço público do dashboard (monta o link de login único) |
+| `KIIPITADS_URL` | Endereço do KiipitADS (link "← KiipitADS" no admin) |
+| `ADMIN_PASSWORD_LOGIN` | Vazio: admin não entra por senha quando a integração está ligada. `true` só em emergência |
 
 Credenciais ficam só no `.env` (fora do git). Developer token, refresh token e client secret
 nunca vão para o frontend nem para os logs.
@@ -160,7 +165,8 @@ docker compose -f docker-compose.prod.yml exec backend node dist/scripts/seedAdm
 Abra o endereço mostrado pelo `serve status`, entre com o admin e:
 
 1. **Contas → Atualizar lista da MCC**
-2. Ligue **Sincronizar** nas contas dos clientes (a primeira sync de cada conta puxa 13 meses).
+2. Ligue **Sincronizar** nas contas dos clientes (os últimos 30 dias entram na hora; o histórico de
+   13 meses completa nos dias seguintes, dentro da cota diária).
 3. Desligue **Valor/ROAS** nas contas de lead que usam valor padrão de conversão.
 4. **Usuários → Novo usuário**: crie o cliente, gere a senha e vincule as contas.
 5. Use **Ver como cliente** para conferir antes de mandar o acesso.
@@ -219,12 +225,37 @@ recuperam sozinhos no sync seguinte, porque cada execução reprocessa os últim
 
 ---
 
-## 5. Como o sync funciona
+## 5. Integração com o KiipitADS
+
+O KiipitADS (`github.com/julianoduit/KiipitADS`) é a visão da equipe; este dashboard é o que o
+cliente vê. Os dois rodam no mesmo notebook e conversam pela rede Docker `duit-interno`:
+
+- **API interna** (`/api/internal/*`, token `INTERNAL_API_TOKEN`): o KiipitADS lista as contas
+  (por customer ID), ativa/desativa, liga/desliga valor/ROAS e pede sincronização. O Caddy responde
+  404 para esse caminho, então ela só existe dentro do servidor, em `http://dashboard-api:3000`.
+- **Login único**: o KiipitADS pede um link de uso único (60 s) e abre o admin daqui já logado
+  como "Equipe Dúit (KiipitADS)". Com a integração ligada, admin não entra mais por senha no site
+  público. Clientes continuam entrando normalmente.
+
+Para ligar (no notebook):
+
+1. No `.env` daqui: `INTERNAL_API_TOKEN` (gere com `openssl rand -hex 32`), `PUBLIC_URL`,
+   `KIIPITADS_URL` e `SYNC_DAILY_OPS_BUDGET=350`. Depois `./scripts/deploy.sh` (cria a rede `duit-interno`).
+2. No `.env` do KiipitADS (`/opt/kiipitads/.env`): `KIIPIT_DASHBOARD_API=http://dashboard-api:3000` e
+   `KIIPIT_DASHBOARD_TOKEN=<o mesmo token>`. Depois `kiipit publicar`.
+
+Emergência (KiipitADS fora do ar e precisa do admin daqui): `ADMIN_PASSWORD_LOGIN=true` no `.env` e
+`docker compose -f docker-compose.prod.yml up -d backend`. Desligue de novo depois.
+
+## 6. Como o sync funciona
 
 - Período no fuso da conta, terminando **ontem** (o dia corrente fica de fora para não congelar
   um número parcial das 05:00 até o dia seguinte).
-- Execução diária: reprocessa os últimos `SYNC_WINDOW_DAYS` (30) dias. Primeira execução de uma
-  conta: backfill de `SYNC_BACKFILL_MONTHS` (13) meses, em blocos mensais.
+- Execução diária em duas passadas: primeiro reprocessa os últimos `SYNC_WINDOW_DAYS` (30) dias
+  de todas as contas ativas; depois, com o que sobrar de `SYNC_DAILY_OPS_BUDGET`, avança a carga
+  histórica (até `SYNC_BACKFILL_MONTHS`, 13 meses) mês a mês, começando pelas contas com menos
+  histórico. Conta nova mostra os últimos 30 dias no primeiro sync; o histórico completa nos
+  dias seguintes. Sem cota, a execução fica "adiada" e continua no próximo sync.
 - Cada bloco é gravado numa transação: upsert de tudo que a API devolveu e remoção, dentro do
   bloco, das linhas que não vieram mais (a API omite linhas sem conversão; sem isso uma conversão
   retirada pelo Google continuaria contando).
@@ -237,7 +268,7 @@ recuperam sozinhos no sync seguinte, porque cada execução reprocessa os últim
   de sub-MCCs, como "Clientes - Dúit Marketing", ficam de fora de propósito, assim como contas
   manager e canceladas/encerradas. Contas que saem da lista ficam marcadas como "Fora da MCC".
 
-## 6. Segurança
+## 7. Segurança
 
 - Somente leitura na Google Ads API: o client só expõe `searchStream` e recusa qualquer
   consulta que não seja `SELECT`.
