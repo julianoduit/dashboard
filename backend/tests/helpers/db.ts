@@ -7,17 +7,18 @@ export async function resetDb(): Promise<void> {
 }
 
 export async function createAccount(
-  overrides: Partial<{ customerId: string; nome: string; fuso: string; ativo: boolean; backfillConcluido: boolean }> = {},
+  overrides: Partial<{ customerId: string; nome: string; fuso: string; ativo: boolean; historicoAte: string | null }> = {},
 ): Promise<number> {
   const res = await getPool().query<{ id: number }>(
-    `INSERT INTO ad_accounts (customer_id, nome, moeda, fuso, status_google, ativo, backfill_concluido)
+    `INSERT INTO ad_accounts (customer_id, nome, moeda, fuso, status_google, ativo, historico_ate)
      VALUES ($1, $2, 'BRL', $3, 'ENABLED', $4, $5) RETURNING id`,
     [
       overrides.customerId ?? '1234567890',
       overrides.nome ?? 'Conta Teste',
       overrides.fuso ?? 'America/Sao_Paulo',
       overrides.ativo ?? true,
-      overrides.backfillConcluido ?? true,
+      // Padrão: histórico já completo (13 meses antes de 26/10/2026, o "ontem" dos testes).
+      overrides.historicoAte === undefined ? '2025-09-27' : overrides.historicoAte,
     ],
   );
   return res.rows[0]!.id;

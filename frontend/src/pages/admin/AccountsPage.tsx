@@ -4,6 +4,14 @@ import { useAdminContas, useAlterarConta, useAtualizarMcc, useSincronizar, type 
 import { Badge, SyncBadge } from '../../components/StatusBadge';
 import { useToast } from '../../components/Toast';
 import { customerId, dataHora, tempoRelativo } from '../../lib/format';
+
+function Historico({ c }: { c: AdminConta }) {
+  if (!c.ativo && !c.historico_ate) return null;
+  if (c.historico_completo) return <span className="cell-sub">Histórico de 13 meses completo</span>;
+  if (!c.historico_ate) return <span className="cell-sub">Histórico: aguardando o 1º sync</span>;
+  const [y, m] = c.historico_ate.split('-');
+  return <span className="cell-sub">Histórico carregado desde {m}/{y} (completa nos próximos syncs)</span>;
+}
 import { AdminShell } from './AdminShell';
 
 type Filtro = 'todas' | 'ativas' | 'inativas' | 'erro' | 'fora';
@@ -50,6 +58,7 @@ function UltimaSync({ c }: { c: AdminConta }) {
           {tempoRelativo(c.ultima_sync_em)}
         </span>
       ) : null}
+      <Historico c={c} />
       {c.ultima_sync_status === 'erro' && c.ultima_sync_erro ? (
         <span className="cell-sub" style={{ color: 'var(--bad)', maxWidth: 280, whiteSpace: 'normal' }}>
           {c.ultima_sync_erro.slice(0, 140)}

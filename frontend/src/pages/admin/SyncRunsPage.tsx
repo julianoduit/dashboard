@@ -4,10 +4,10 @@ import { SyncBadge } from '../../components/StatusBadge';
 import { customerId, dataCurta, dataHora, duracao, numero } from '../../lib/format';
 import { AdminShell } from './AdminShell';
 
-const TIPOS: Record<SyncRun['tipo'], string> = { diario: 'Diária', manual: 'Manual', backfill: 'Carga inicial (13 meses)' };
+const TIPOS: Record<SyncRun['tipo'], string> = { diario: 'Diária', manual: 'Manual', backfill: 'Carga do histórico' };
 
 function Erro({ r }: { r: SyncRun }) {
-  if (!r.erro) return null;
+  if (!r.erro) return r.observacao ? <span className="cell-sub" style={{ whiteSpace: 'normal', maxWidth: 320 }}>{r.observacao}</span> : null;
   return (
     <details>
       <summary className="link-btn" style={{ color: 'var(--bad)' }}>
@@ -42,6 +42,7 @@ export function SyncRunsPage() {
           <option value="erro">Só erros</option>
           <option value="sucesso">Só sucesso</option>
           <option value="executando">Em andamento</option>
+          <option value="adiado">Adiadas (cota do dia)</option>
         </select>
         <select
           className="select"
@@ -84,6 +85,9 @@ export function SyncRunsPage() {
                 <th scope="col" className="num">
                   Linhas
                 </th>
+                <th scope="col" className="num" title="Operações gastas na cota diária da Google Ads API">
+                  Operações
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -105,6 +109,7 @@ export function SyncRunsPage() {
                   <td>{dataHora(r.inicio)}</td>
                   <td className="num">{duracao(r.inicio, r.fim)}</td>
                   <td className="num">{numero(r.linhas_gravadas)}</td>
+                  <td className="num">{numero(r.operacoes)}</td>
                 </tr>
               ))}
             </tbody>
@@ -117,7 +122,7 @@ export function SyncRunsPage() {
                   <SyncBadge status={r.status} />
                 </div>
                 <span className="cell-sub">
-                  {TIPOS[r.tipo]} {quem(r)} · {dataHora(r.inicio)} · {duracao(r.inicio, r.fim)} · {numero(r.linhas_gravadas)} linhas
+                  {TIPOS[r.tipo]} {quem(r)} · {dataHora(r.inicio)} · {duracao(r.inicio, r.fim)} · {numero(r.linhas_gravadas)} linhas · {numero(r.operacoes)} operações
                 </span>
                 <span className="cell-sub">Período: {descricao(r)}</span>
                 <Erro r={r} />

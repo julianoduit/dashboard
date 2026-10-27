@@ -14,6 +14,9 @@ const baseSchema = z.object({
   SYNC_TZ: z.string().default('America/Sao_Paulo'),
   SYNC_WINDOW_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   SYNC_BACKFILL_MONTHS: z.coerce.number().int().min(1).max(36).default(13),
+  // Operações/dia que o dashboard pode gastar na Google Ads API. O projeto do Google Cloud é
+  // dividido com o KiipitADS (Explorer = 2.880/dia; KiipitADS usa até 2.450 por execução).
+  SYNC_DAILY_OPS_BUDGET: z.coerce.number().int().min(10).default(350),
   SYNC_SCHEDULER_ENABLED: z
     .enum(['true', 'false'])
     .default('true')

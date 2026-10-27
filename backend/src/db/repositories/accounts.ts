@@ -9,13 +9,14 @@ export interface AdAccount {
   fuso: string;
   status_google: string | null;
   ativo: boolean;
-  backfill_concluido: boolean;
+  /** Data mais antiga já carregada (carga histórica gradual). null = nada carregado. */
+  historico_ate: string | null;
   exibir_roas: boolean;
   na_mcc: boolean;
   ultima_sync_em: Date | null;
 }
 
-const columns = 'id, customer_id, nome, moeda, fuso, status_google, ativo, backfill_concluido, exibir_roas, na_mcc, ultima_sync_em';
+const columns = 'id, customer_id, nome, moeda, fuso, status_google, ativo, historico_ate, exibir_roas, na_mcc, ultima_sync_em';
 
 /**
  * Grava/atualiza a lista de contas vinda da MCC. Não altera `ativo` de contas existentes.
@@ -78,14 +79,17 @@ export async function updateFlags(
   );
 }
 
-export async function markSynced(id: number, backfillConcluido: boolean, db: Queryable = getPool()): Promise<void> {
+/** A janela recente foi sincronizada: é o que o cliente vê como "dados atualizados em". */
+export async function markSynced(id: number, db: Queryable = getPool()): Promise<void> {
+  await db.query('UPDATE ad_accounts SET ultima_sync_em = now(), atualizado_em = now() WHERE id = $1', [id]);
+}
+
+/** Recua a data mais antiga carregada (nunca avança: dado mais antigo já gravado continua valendo). */
+export async function extendHistory(id: number, desde: string, db: Queryable = getPool()): Promise<void> {
   await db.query(
-    `UPDATE ad_accounts
-        SET ultima_sync_em = now(),
-            backfill_concluido = backfill_concluido OR $2,
-            atualizado_em = now()
+    `UPDATE ad_accounts SET historico_ate = LEAST(coalesce(historico_ate, $2::date), $2::date), atualizado_em = now()
       WHERE id = $1`,
-    [id, backfillConcluido],
+    [id, desde],
   );
 }
 

@@ -4,6 +4,7 @@ const MAPA: Record<SyncStatus, { classe: string; texto: string }> = {
   sucesso: { classe: 'badge--ok', texto: 'Sucesso' },
   erro: { classe: 'badge--erro', texto: 'Erro' },
   executando: { classe: 'badge--run', texto: 'Sincronizando' },
+  adiado: { classe: 'badge--warn', texto: 'Adiado (cota do dia)' },
 };
 
 export function SyncBadge({ status }: { status: SyncStatus | null }) {

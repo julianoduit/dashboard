@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addMonths, daysBetweenInclusive, isIsoDate, splitByMonth, todayInTimeZone } from '../../src/lib/dates.js';
-import { syncRange } from '../../src/sync/syncAccount.js';
+import { alvoHistorico, janelaRecente, proximoBlocoHistorico } from '../../src/sync/syncAccount.js';
 
 describe('datas', () => {
   it('hoje respeita o fuso da conta', () => {
@@ -29,20 +29,18 @@ describe('datas', () => {
   });
 });
 
-describe('syncRange', () => {
+describe('janela e carga histórica', () => {
   const now = new Date('2026-10-27T12:00:00Z');
-  it('janela diária: 30 dias terminando ontem', () => {
-    expect(syncRange({ fuso: 'America/Sao_Paulo', backfill_concluido: true }, { now, windowDays: 30, backfillMonths: 13 })).toEqual({
-      inicio: '2026-09-27',
-      fim: '2026-10-26',
-      backfill: false,
-    });
+  it('janela diária: 30 dias terminando ontem, no fuso da conta', () => {
+    expect(janelaRecente('America/Sao_Paulo', now, 30)).toEqual({ inicio: '2026-09-27', fim: '2026-10-26' });
   });
-  it('backfill: 13 meses terminando ontem', () => {
-    expect(syncRange({ fuso: 'America/Sao_Paulo', backfill_concluido: false }, { now, windowDays: 30, backfillMonths: 13 })).toEqual({
-      inicio: '2025-09-27',
-      fim: '2026-10-26',
-      backfill: true,
-    });
+  it('alvo do histórico: 13 meses terminando ontem', () => {
+    expect(alvoHistorico('2026-10-26', 13)).toBe('2025-09-27');
+  });
+  it('próximo bloco é o mês anterior, sem passar do alvo', () => {
+    expect(proximoBlocoHistorico('2026-09-27', '2025-09-27')).toEqual({ inicio: '2026-09-01', fim: '2026-09-26' });
+    expect(proximoBlocoHistorico('2026-09-01', '2025-09-27')).toEqual({ inicio: '2026-08-01', fim: '2026-08-31' });
+    expect(proximoBlocoHistorico('2025-10-01', '2025-09-27')).toEqual({ inicio: '2025-09-27', fim: '2025-09-30' });
+    expect(proximoBlocoHistorico('2025-09-27', '2025-09-27')).toBeNull();
   });
 });

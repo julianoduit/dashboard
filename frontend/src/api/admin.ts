@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from './client';
 import type { Conta, Papel, Usuario } from './types';
 
-export type SyncStatus = 'executando' | 'sucesso' | 'erro';
+export type SyncStatus = 'executando' | 'sucesso' | 'erro' | 'adiado';
 
 export interface AdminConta {
   id: number;
@@ -14,7 +14,8 @@ export interface AdminConta {
   ativo: boolean;
   exibir_roas: boolean;
   na_mcc: boolean;
-  backfill_concluido: boolean;
+  historico_ate: string | null;
+  historico_completo: boolean;
   ultima_sync_em: string | null;
   usuarios: number;
   ultima_sync_status: SyncStatus | null;
@@ -39,7 +40,9 @@ export interface SyncRun {
   inicio: string;
   fim: string | null;
   linhas_gravadas: number;
+  operacoes: number;
   erro: string | null;
+  observacao: string | null;
   disparado_por_nome: string | null;
 }
 

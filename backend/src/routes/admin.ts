@@ -8,9 +8,17 @@ import { GoogleAdsApiError } from '../googleAds/errors.js';
 import { HttpError, notFound } from '../http/errors.js';
 import { logger } from '../logger.js';
 import { refreshMccAccounts } from '../sync/mcc.js';
-import { syncAccount, type SearchClient } from '../sync/syncAccount.js';
+import { alvoHistorico, janelaRecente, syncAccount, type SearchClient } from '../sync/syncAccount.js';
+import { env } from '../config/env.js';
 
 const idParam = z.coerce.number().int().positive();
+
+/** Acrescenta se a carga histórica (13 meses) já terminou, para a tela não precisar calcular. */
+export function comHistorico<T extends { fuso: string; historico_ate: string | null }>(c: T): T & { historico_completo: boolean } {
+  const config = env();
+  const alvo = alvoHistorico(janelaRecente(c.fuso, new Date(), config.SYNC_WINDOW_DAYS).fim, config.SYNC_BACKFILL_MONTHS);
+  return { ...c, historico_completo: c.historico_ate !== null && c.historico_ate <= alvo };
+}
 const senha = z.string().min(8, 'mínimo de 8 caracteres').max(200);
 const email = z.string().trim().toLowerCase().email().max(254);
 const papel = z.enum(['admin', 'cliente']);
@@ -46,7 +54,7 @@ export function adminRouter(deps: { googleAds: () => SearchClient }): Router {
   // --- Contas ---
 
   router.get('/accounts', async (_req, res) => {
-    res.json(await accounts.listForAdmin());
+    res.json((await accounts.listForAdmin()).map(comHistorico));
   });
 
   /** Consulta a MCC na Google Ads API e atualiza ad_accounts. Só roda quando o admin pede. */
@@ -94,7 +102,7 @@ export function adminRouter(deps: { googleAds: () => SearchClient }): Router {
     const q = z
       .object({
         accountId: idParam.optional(),
-        status: z.enum(['executando', 'sucesso', 'erro']).optional(),
+        status: z.enum(['executando', 'sucesso', 'erro', 'adiado']).optional(),
         limit: z.coerce.number().int().min(1).max(500).default(100),
       })
       .parse(req.query);
