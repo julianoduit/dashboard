@@ -1,0 +1,21 @@
+# Ambiente local: apenas o Postgres. O backend roda com `npm run dev` fora do Docker.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-duit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-duit}
+      POSTGRES_DB: ${POSTGRES_DB:-duit_dashboard}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-duit} -d ${POSTGRES_DB:-duit_dashboard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
