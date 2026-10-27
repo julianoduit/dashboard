@@ -29,6 +29,17 @@ const googleAdsSchema = z.object({
   GOOGLE_ADS_API_VERSION: z.string().regex(/^v\d+$/).default('v26'),
 });
 
+const authSchema = z.object({
+  // Assina os JWTs de sessão. Gere com: openssl rand -base64 48
+  JWT_SECRET: z.string().min(32, 'mínimo de 32 caracteres'),
+  SESSION_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+  // Atrás do Caddy o IP real vem em X-Forwarded-For; 1 = confiar no primeiro proxy.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  // Padrão: cookie Secure em produção. Pode ser forçado para testes locais em http.
+  COOKIE_SECURE: z.enum(['true', 'false']).optional(),
+});
+
+export type AuthEnv = z.infer<typeof authSchema>;
 export type BaseEnv = z.infer<typeof baseSchema>;
 export type GoogleAdsEnv = z.infer<typeof googleAdsSchema>;
 
@@ -43,11 +54,17 @@ function parse<T extends z.ZodType>(schema: T, name: string): z.infer<T> {
 }
 
 let baseCache: BaseEnv | undefined;
+let authCache: AuthEnv | undefined;
 let googleAdsCache: GoogleAdsEnv | undefined;
 
 export function env(): BaseEnv {
   baseCache ??= parse(baseSchema, 'geral');
   return baseCache;
+}
+
+export function authEnv(): AuthEnv {
+  authCache ??= parse(authSchema, 'autenticação');
+  return authCache;
 }
 
 export function googleAdsEnv(): GoogleAdsEnv {

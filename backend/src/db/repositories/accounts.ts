@@ -67,3 +67,36 @@ export async function markSynced(id: number, backfillConcluido: boolean, db: Que
     [id, backfillConcluido],
   );
 }
+
+export interface AdAccountAdminRow extends AdAccount {
+  usuarios: number;
+  ultima_sync_status: string | null;
+  ultima_sync_erro: string | null;
+}
+
+/** Lista para o admin: todas as contas com vínculos e o resultado da última sincronização. */
+export async function listForAdmin(db: Queryable = getPool()): Promise<AdAccountAdminRow[]> {
+  const res = await db.query<AdAccountAdminRow>(
+    `SELECT ${columns.split(', ').map((c) => `a.${c}`).join(', ')},
+            (SELECT count(*) FROM user_ad_accounts ua WHERE ua.ad_account_id = a.id)::int AS usuarios,
+            r.status::text AS ultima_sync_status, r.erro AS ultima_sync_erro
+       FROM ad_accounts a
+       LEFT JOIN LATERAL (
+         SELECT status, erro FROM sync_runs s WHERE s.ad_account_id = a.id ORDER BY s.id DESC LIMIT 1
+       ) r ON true
+      ORDER BY a.ativo DESC, a.nome`,
+  );
+  return res.rows;
+}
+
+/** Contas visíveis para um usuário cliente (vinculadas e ativas). */
+export async function listForUser(userId: number, db: Queryable = getPool()): Promise<AdAccount[]> {
+  const res = await db.query<AdAccount>(
+    `SELECT ${columns.split(', ').map((c) => `a.${c}`).join(', ')}
+       FROM ad_accounts a JOIN user_ad_accounts ua ON ua.ad_account_id = a.id
+      WHERE ua.user_id = $1 AND a.ativo
+      ORDER BY a.nome`,
+    [userId],
+  );
+  return res.rows;
+}

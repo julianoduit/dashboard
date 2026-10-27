@@ -14,6 +14,8 @@ export default defineConfig({
       GOOGLE_ADS_CLIENT_SECRET: 'test-client-secret',
       GOOGLE_ADS_REFRESH_TOKEN: 'test-refresh-token',
       GOOGLE_ADS_LOGIN_CUSTOMER_ID: '1112223333',
+      JWT_SECRET: 'test-secret-test-secret-test-secret-123',
+      SYNC_SCHEDULER_ENABLED: 'false',
     },
     // Os testes de integração compartilham o mesmo banco de teste.
     fileParallelism: false,
