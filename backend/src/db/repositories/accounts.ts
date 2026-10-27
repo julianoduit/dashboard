@@ -9,14 +9,23 @@ export interface AdAccount {
   fuso: string;
   status_google: string | null;
   ativo: boolean;
-  backfill_concluido: boolean;
+  /** Data mais antiga já carregada (carga histórica gradual). null = nada carregado. */
+  historico_ate: string | null;
+  exibir_roas: boolean;
+  na_mcc: boolean;
   ultima_sync_em: Date | null;
 }
 
-const columns = 'id, customer_id, nome, moeda, fuso, status_google, ativo, backfill_concluido, ultima_sync_em';
+const columns = 'id, customer_id, nome, moeda, fuso, status_google, ativo, historico_ate, exibir_roas, na_mcc, ultima_sync_em';
 
-/** Grava/atualiza a lista de contas vinda da MCC. Não altera o campo `ativo` de contas existentes. */
+/**
+ * Grava/atualiza a lista de contas vinda da MCC. Não altera `ativo` de contas existentes.
+ * Contas que não vieram nesta lista ficam com na_mcc = false (nada é apagado).
+ */
 export async function upsertFromMcc(records: MccClientRecord[], db: Queryable = getPool()): Promise<number> {
+  await db.query('UPDATE ad_accounts SET na_mcc = (customer_id = ANY($1::text[])) WHERE na_mcc IS DISTINCT FROM (customer_id = ANY($1::text[]))', [
+    records.map((r) => r.customerId),
+  ]);
   if (!records.length) return 0;
   const res = await db.query(
     `INSERT INTO ad_accounts (customer_id, nome, moeda, fuso, status_google)
@@ -26,6 +35,7 @@ export async function upsertFromMcc(records: MccClientRecord[], db: Queryable = 
        moeda = EXCLUDED.moeda,
        fuso = EXCLUDED.fuso,
        status_google = EXCLUDED.status_google,
+       na_mcc = TRUE,
        atualizado_em = now()`,
     [
       records.map((r) => r.customerId),
@@ -57,13 +67,61 @@ export async function setActive(id: number, ativo: boolean, db: Queryable = getP
   await db.query('UPDATE ad_accounts SET ativo = $2, atualizado_em = now() WHERE id = $1', [id, ativo]);
 }
 
-export async function markSynced(id: number, backfillConcluido: boolean, db: Queryable = getPool()): Promise<void> {
+export async function updateFlags(
+  id: number,
+  flags: Partial<{ ativo: boolean; exibirRoas: boolean }>,
+  db: Queryable = getPool(),
+): Promise<void> {
   await db.query(
-    `UPDATE ad_accounts
-        SET ultima_sync_em = now(),
-            backfill_concluido = backfill_concluido OR $2,
-            atualizado_em = now()
+    `UPDATE ad_accounts SET ativo = coalesce($2, ativo), exibir_roas = coalesce($3, exibir_roas), atualizado_em = now()
       WHERE id = $1`,
-    [id, backfillConcluido],
+    [id, flags.ativo ?? null, flags.exibirRoas ?? null],
   );
+}
+
+/** A janela recente foi sincronizada: é o que o cliente vê como "dados atualizados em". */
+export async function markSynced(id: number, db: Queryable = getPool()): Promise<void> {
+  await db.query('UPDATE ad_accounts SET ultima_sync_em = now(), atualizado_em = now() WHERE id = $1', [id]);
+}
+
+/** Recua a data mais antiga carregada (nunca avança: dado mais antigo já gravado continua valendo). */
+export async function extendHistory(id: number, desde: string, db: Queryable = getPool()): Promise<void> {
+  await db.query(
+    `UPDATE ad_accounts SET historico_ate = LEAST(coalesce(historico_ate, $2::date), $2::date), atualizado_em = now()
+      WHERE id = $1`,
+    [id, desde],
+  );
+}
+
+export interface AdAccountAdminRow extends AdAccount {
+  usuarios: number;
+  ultima_sync_status: string | null;
+  ultima_sync_erro: string | null;
+}
+
+/** Lista para o admin: todas as contas com vínculos e o resultado da última sincronização. */
+export async function listForAdmin(db: Queryable = getPool()): Promise<AdAccountAdminRow[]> {
+  const res = await db.query<AdAccountAdminRow>(
+    `SELECT ${columns.split(', ').map((c) => `a.${c}`).join(', ')},
+            (SELECT count(*) FROM user_ad_accounts ua WHERE ua.ad_account_id = a.id)::int AS usuarios,
+            r.status::text AS ultima_sync_status, r.erro AS ultima_sync_erro
+       FROM ad_accounts a
+       LEFT JOIN LATERAL (
+         SELECT status, erro FROM sync_runs s WHERE s.ad_account_id = a.id ORDER BY s.id DESC LIMIT 1
+       ) r ON true
+      ORDER BY a.ativo DESC, a.nome`,
+  );
+  return res.rows;
+}
+
+/** Contas visíveis para um usuário cliente (vinculadas e ativas). */
+export async function listForUser(userId: number, db: Queryable = getPool()): Promise<AdAccount[]> {
+  const res = await db.query<AdAccount>(
+    `SELECT ${columns.split(', ').map((c) => `a.${c}`).join(', ')}
+       FROM ad_accounts a JOIN user_ad_accounts ua ON ua.ad_account_id = a.id
+      WHERE ua.user_id = $1 AND a.ativo
+      ORDER BY a.nome`,
+    [userId],
+  );
+  return res.rows;
 }

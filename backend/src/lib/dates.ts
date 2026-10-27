@@ -57,3 +57,8 @@ export function splitByMonth(inicio: IsoDate, fim: IsoDate): Array<{ inicio: Iso
   }
   return chunks;
 }
+
+/** Primeiro dia do mês da data. */
+export function startOfMonth(d: IsoDate): IsoDate {
+  return `${d.slice(0, 7)}-01`;
+}

@@ -11,8 +11,9 @@ export class FakeGoogleAds implements SearchClient {
   failFor = new Set<string>();
   queries: Array<{ customerId: string; query: string }> = [];
 
-  async searchStream<T>(customerId: string, query: string): Promise<T[]> {
+  async searchStream<T>(customerId: string, query: string, onAttempt?: () => void): Promise<T[]> {
     this.queries.push({ customerId, query });
+    onAttempt?.();
     if (this.failFor.has(customerId)) throw new Error(`falha simulada na conta ${customerId}`);
     const m = /BETWEEN '(\d{4}-\d{2}-\d{2})' AND '(\d{4}-\d{2}-\d{2})'/.exec(query);
     if (!m) throw new Error('consulta sem período');

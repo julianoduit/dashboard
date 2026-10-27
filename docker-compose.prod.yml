@@ -1,0 +1,86 @@
+# Produção (notebook/VPS com Docker). Nenhuma porta é publicada no host: o acesso
+# público é feito pelo Tailscale Funnel em https://<TS_HOSTNAME>.<tailnet>.ts.net
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # A senha do Postgres deve ser só letras e números (vai dentro da URL).
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Tailscale -> Caddy -> backend: dois proxies na frente.
+      TRUST_PROXY: "2"
+      SYNC_SCHEDULER_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      default:
+      # Rede compartilhada com o KiipitADS, que chama a API interna em http://dashboard-api:3000.
+      duit-interno:
+        aliases: [dashboard-api]
+    logging: *logging
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    volumes:
+      # Opcional: coloque o logo oficial em ./brand/logo.svg para substituir o provisório.
+      - ./brand:/srv/brand-override:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *logging
+
+  tailscale:
+    image: tailscale/tailscale:v1.104.2
+    restart: unless-stopped
+    hostname: ${TS_HOSTNAME:-duit-dashboard}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: ${TS_HOSTNAME:-duit-dashboard}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tsstate:/var/lib/tailscale
+      - ./deploy/tailscale:/config:ro
+    depends_on:
+      - web
+    logging: *logging
+
+volumes:
+  pgdata:
+  tsstate:
+
+networks:
+  # Criada uma vez no servidor: docker network create duit-interno (o deploy.sh já faz).
+  duit-interno:
+    external: true

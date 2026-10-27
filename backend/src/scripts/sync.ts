@@ -16,7 +16,16 @@ await runCli(async () => {
 
   if (values.all) {
     const results = await syncAllActive(client);
-    console.table(results.map((r) => ({ conta: r.accountId, status: r.result?.status ?? 'erro', linhas: r.result?.linhas ?? 0, erro: r.erro ?? r.result?.erro ?? '' })));
+    console.table(
+      results.map((r) => ({
+        conta: r.accountId,
+        etapa: r.etapa,
+        status: r.result?.status ?? 'erro',
+        linhas: r.result?.linhas ?? 0,
+        operacoes: r.result?.operacoes ?? 0,
+        nota: r.erro ?? r.result?.erro ?? r.result?.observacao ?? '',
+      })),
+    );
     return;
   }
 

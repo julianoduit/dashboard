@@ -32,7 +32,11 @@ export class GoogleAdsClient {
     this.timeoutMs = opts.timeoutMs ?? 120_000;
   }
 
-  async searchStream<T = Record<string, unknown>>(customerId: string, query: string): Promise<T[]> {
+  /**
+   * @param onAttempt chamado a cada requisição HTTP (incluindo novas tentativas): cada uma conta
+   *   na cota diária de operações da Google Ads API.
+   */
+  async searchStream<T = Record<string, unknown>>(customerId: string, query: string, onAttempt?: () => void): Promise<T[]> {
     const cid = customerId.replace(/-/g, '');
     if (!/^\d{10}$/.test(cid)) throw new Error(`customer_id inválido: ${customerId}`);
     if (!/^\s*SELECT\s/i.test(query)) throw new Error('Somente consultas GAQL SELECT são permitidas');
@@ -42,6 +46,7 @@ export class GoogleAdsClient {
     return withRetry(
       async () => {
         const accessToken = await this.opts.getAccessToken();
+        onAttempt?.();
         let res: Response;
         try {
           res = await this.fetchImpl(url, {

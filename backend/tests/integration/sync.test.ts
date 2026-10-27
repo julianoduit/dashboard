@@ -8,7 +8,7 @@ import { campaignRow, conversionRow, FakeGoogleAds } from '../helpers/fakeGoogle
 
 // 27/10/2026 09:00 em São Paulo: janela de 30 dias = 27/09 a 26/10.
 const NOW = new Date('2026-10-27T12:00:00Z');
-const opts = (client: FakeGoogleAds) => ({ client, now: NOW, windowDays: 30, backfillMonths: 13 });
+const opts = (client: FakeGoogleAds) => ({ client, now: NOW, windowDays: 30, backfillMonths: 13, dailyBudget: 1000 });
 
 async function count(table: string, accountId: number): Promise<number> {
   const res = await getPool().query<{ n: number }>(`SELECT count(*)::int AS n FROM ${table} WHERE ad_account_id = $1`, [accountId]);
@@ -119,30 +119,84 @@ describe('sync: upsert idempotente', () => {
   });
 });
 
-describe('sync: período, backfill e registro de execução', () => {
+describe('sync: carga histórica gradual, cota diária e registro de execução', () => {
   beforeEach(resetDb);
 
-  it('primeira sync faz backfill de 13 meses em blocos mensais e marca a conta', async () => {
-    const accountId = await createAccount({ backfillConcluido: false });
+  async function conta(id: number) {
+    const r = await getPool().query('SELECT historico_ate, ultima_sync_em FROM ad_accounts WHERE id = $1', [id]);
+    return r.rows[0] as { historico_ate: string | null; ultima_sync_em: Date | null };
+  }
+
+  it('conta nova com cota folgada: janela + 13 meses de histórico, mês a mês', async () => {
+    const accountId = await createAccount({ historicoAte: null });
     const api = new FakeGoogleAds();
     api.campaignRows = [campaignRow('2025-09-27', '1'), campaignRow('2026-10-26', '1')];
 
-    const result = await syncAccount(accountId, opts(api));
-    expect(result).toMatchObject({ status: 'sucesso', inicio: '2025-09-27', fim: '2026-10-26' });
-    // set/2025 a out/2026 = 14 meses de calendário, 2 consultas por bloco.
-    expect(api.queries).toHaveLength(28);
+    const result = await syncAccount(accountId, { ...opts(api), tipo: 'manual', dailyBudget: 1000 });
+    expect(result).toMatchObject({ status: 'sucesso', inicio: '2025-09-27', fim: '2026-10-26', historicoCompleto: true });
+    // janela 27/09-26/10 = 2 blocos; histórico 27/09/2025 a 26/09/2026 = 13 blocos; 2 consultas cada.
+    expect(result.operacoes).toBe(30);
+    expect(api.queries).toHaveLength(30);
     expect(await count('campaign_daily_metrics', accountId)).toBe(2);
+    const c = await conta(accountId);
+    expect(c.historico_ate).toBe('2025-09-27');
+    expect(c.ultima_sync_em).not.toBeNull();
 
-    const acc = await getPool().query('SELECT backfill_concluido, ultima_sync_em FROM ad_accounts WHERE id = $1', [accountId]);
-    expect(acc.rows[0].backfill_concluido).toBe(true);
-    expect(acc.rows[0].ultima_sync_em).not.toBeNull();
+    const run = await getPool().query('SELECT tipo, status, linhas_gravadas, operacoes FROM sync_runs WHERE id = $1', [result.syncRunId]);
+    expect(run.rows[0]).toEqual({ tipo: 'manual', status: 'sucesso', linhas_gravadas: 2, operacoes: 30 });
+  });
 
-    const run = await getPool().query('SELECT tipo, status, linhas_gravadas FROM sync_runs WHERE id = $1', [result.syncRunId]);
-    expect(run.rows[0]).toEqual({ tipo: 'backfill', status: 'sucesso', linhas_gravadas: 2 });
+  it('cota curta: janela entra, histórico para no limite e continua no dia seguinte sem duplicar', async () => {
+    const accountId = await createAccount({ historicoAte: null });
+    const api = new FakeGoogleAds();
+    api.campaignRows = [campaignRow('2026-08-15', '1'), campaignRow('2026-10-20', '1')];
+
+    // 10 operações: janela (4) + 3 meses de histórico (6).
+    const r1 = await syncAccount(accountId, { ...opts(api), tipo: 'manual', dailyBudget: 10 });
+    expect(r1).toMatchObject({ status: 'sucesso', operacoes: 10, historicoCompleto: false });
+    expect(r1.observacao).toMatch(/continua no próximo sync/);
+    expect((await conta(accountId)).historico_ate).toBe('2026-07-01');
+
+    // Mesmo dia: cota esgotada, a passada de histórico fica adiada sem chamar a API.
+    const antes = api.queries.length;
+    const r2 = await syncAccount(accountId, { ...opts(api), modo: 'historico', dailyBudget: 10 });
+    expect(r2.status).toBe('adiado');
+    expect(api.queries.length).toBe(antes);
+
+    // "Dia seguinte" (zera o uso de hoje): retoma de 01/07 para trás, até completar.
+    await getPool().query(`UPDATE sync_runs SET inicio = inicio - interval '1 day'`);
+    const r3 = await syncAccount(accountId, { ...opts(api), modo: 'historico', dailyBudget: 1000 });
+    expect(r3).toMatchObject({ status: 'sucesso', historicoCompleto: true });
+    expect((await conta(accountId)).historico_ate).toBe('2025-09-27');
+    // julho só nas 2 consultas da 1ª execução: a retomada não refez meses já carregados
+    expect(api.queries.filter((q) => q.query.includes("'2026-07-01' AND")).length).toBe(2);
+    expect(await count('campaign_daily_metrics', accountId)).toBe(2);
+  });
+
+  it('sem cota nem para a janela: execução adiada, nada marcado como atualizado', async () => {
+    const accountId = await createAccount({ historicoAte: null });
+    const api = new FakeGoogleAds();
+    const r = await syncAccount(accountId, { ...opts(api), dailyBudget: 1 });
+    expect(r.status).toBe('adiado');
+    expect(api.queries).toHaveLength(0);
+    expect(await conta(accountId)).toEqual({ historico_ate: null, ultima_sync_em: null });
+  });
+
+  it('syncAll: janela de todas as contas antes de qualquer histórico', async () => {
+    const a = await createAccount({ customerId: '1000000001', historicoAte: null });
+    const b = await createAccount({ customerId: '1000000002', historicoAte: null });
+    const api = new FakeGoogleAds();
+    const itens = await syncAllActive(api, { now: NOW });
+    expect(itens.filter((i) => i.etapa === 'janela').map((i) => i.result?.status)).toEqual(['sucesso', 'sucesso']);
+    expect((await conta(a)).ultima_sync_em).not.toBeNull();
+    expect((await conta(b)).ultima_sync_em).not.toBeNull();
+    // A primeira consulta de histórico só acontece depois das 4 consultas de janela de cada conta.
+    const primeiraHistorico = api.queries.findIndex((q) => q.query.includes("'2026-09-01' AND '2026-09-26'"));
+    expect(primeiraHistorico).toBeGreaterThanOrEqual(8);
   });
 
   it('erro na API grava sync_run com erro e não marca backfill como concluído', async () => {
-    const accountId = await createAccount({ backfillConcluido: false });
+    const accountId = await createAccount({ historicoAte: null });
     const api = new FakeGoogleAds();
     api.failFor.add('1234567890');
 
@@ -152,8 +206,7 @@ describe('sync: período, backfill e registro de execução', () => {
     expect(run.rows[0].status).toBe('erro');
     expect(run.rows[0].erro).toContain('falha simulada');
     expect(run.rows[0].fim).not.toBeNull();
-    const acc = await getPool().query('SELECT backfill_concluido, ultima_sync_em FROM ad_accounts WHERE id = $1', [accountId]);
-    expect(acc.rows[0]).toEqual({ backfill_concluido: false, ultima_sync_em: null });
+    expect(await conta(accountId)).toEqual({ historico_ate: null, ultima_sync_em: null });
   });
 
   it('erro em uma conta não interrompe as outras', async () => {
@@ -165,8 +218,8 @@ describe('sync: período, backfill e registro de execução', () => {
     api.campaignRows = [campaignRow('2026-10-20', '1')];
     api.failFor.add('1000000002');
 
-    const results = await syncAllActive(api);
-    const byId = Object.fromEntries(results.map((r) => [r.accountId, r.result?.status]));
+    const results = await syncAllActive(api, { now: NOW });
+    const byId = Object.fromEntries(results.filter((r) => r.etapa === 'janela').map((r) => [r.accountId, r.result?.status]));
     expect(byId).toEqual({ [ok1]: 'sucesso', [bad]: 'erro', [ok2]: 'sucesso' });
   });
 

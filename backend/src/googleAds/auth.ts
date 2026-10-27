@@ -22,10 +22,15 @@ export function createAccessTokenProvider(opts: { clientId: string; clientSecret
       const oauthError = data?.data?.error;
       const httpStatus = data?.status;
       const transient = !oauthError && (httpStatus === undefined || httpStatus >= 500);
+      // Sem resposta HTTP = falha de rede (DNS, TLS, firewall). O código (ex.: ECONNRESET) ajuda no diagnóstico.
+      const code = (err as { code?: string; cause?: { code?: string } }).code ?? (err as { cause?: { code?: string } }).cause?.code;
+      const detalhe = oauthError
+        ? `: ${oauthError}${data?.data?.error_description ? ` (${data.data.error_description})` : ''}`
+        : httpStatus === undefined
+          ? ` (falha de rede${code ? `: ${code}` : ''})`
+          : ` (HTTP ${httpStatus})`;
       throw new GoogleAdsApiError({
-        message: oauthError
-          ? `Falha ao renovar o access token OAuth: ${oauthError}${data?.data?.error_description ? ` (${data.data.error_description})` : ''}`
-          : 'Falha ao renovar o access token OAuth',
+        message: `Falha ao renovar o access token OAuth${detalhe}`,
         ...(httpStatus !== undefined && { httpStatus }),
         retryable: transient,
       });

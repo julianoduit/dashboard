@@ -7,6 +7,11 @@ function assertDate(d: string): string {
   return d;
 }
 
+/**
+ * Só as contas ligadas direto à MCC raiz. As sub-MCCs (ex.: "Clientes - Dúit Marketing") e as
+ * contas abaixo delas ficam de fora por decisão da Dúit. Managers e contas canceladas são
+ * filtrados em isSelectableClient.
+ */
 export const mccClientsQuery = `
   SELECT
     customer_client.id,
