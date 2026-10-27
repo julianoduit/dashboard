@@ -5,6 +5,7 @@ import { verifyPassword } from '../auth/password.js';
 import { clearSessionCookie, setSessionCookie } from '../auth/session.js';
 import * as users from '../db/repositories/users.js';
 import { HttpError } from '../http/errors.js';
+import { logger } from '../logger.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const loginSchema = z.object({
@@ -40,7 +41,11 @@ export function authRouter(): Router {
     const { email, senha } = loginSchema.parse(req.body);
     const user = await users.findByEmailWithHash(email);
     const ok = await verifyPassword(senha, user?.senha_hash);
-    if (!user || !ok || !user.ativo) throw new HttpError(401, 'E-mail ou senha incorretos');
+    if (!user || !ok || !user.ativo) {
+      // IP para auditoria (e para conferir o TRUST_PROXY atrás do Tailscale/Caddy). O e-mail não vai para o log.
+      logger.warn({ ip: req.ip }, 'Login recusado');
+      throw new HttpError(401, 'E-mail ou senha incorretos');
+    }
 
     setSessionCookie(res, user);
     res.json({ id: user.id, nome: user.nome, email: user.email, papel: user.papel });

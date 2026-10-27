@@ -1,0 +1,47 @@
+# HTTP interno: o HTTPS público é feito pelo Tailscale Funnel, na frente deste container.
+{
+	admin off
+	auto_https off
+	servers {
+		# Mantém o X-Forwarded-For vindo do container do Tailscale (IP real do visitante).
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Strict-Transport-Security "max-age=31536000"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Logo da Dúit: um arquivo em ./brand no servidor (montado em /srv/brand-override)
+	# substitui o provisório sem precisar refazer a imagem.
+	handle /brand/* {
+		root * /srv
+		header Cache-Control "public, max-age=3600"
+		try_files /brand-override/{http.request.uri.path.file} {path}
+		file_server
+	}
+
+	handle {
+		root * /srv
+		# Arquivos com hash no nome podem ficar em cache para sempre; o resto (index.html) não.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@naoAssets not path /assets/*
+		header @naoAssets Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
