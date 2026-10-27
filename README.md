@@ -145,8 +145,7 @@ não efêmera). Ela só é usada no primeiro boot; depois o estado fica salvo no
 
 ```bash
 ssh duitads
-# hoje o código está na branch claude/sharp-galileo-7alvp2; quando houver uma main, use -b main
-git clone -b claude/sharp-galileo-7alvp2 https://github.com/julianoduit/dashboard.git duit-dashboard
+git clone https://github.com/julianoduit/dashboard.git duit-dashboard
 cd duit-dashboard
 
 cp .env.example .env
@@ -181,7 +180,7 @@ cd duit-dashboard
 ./scripts/deploy.sh          # git pull da branch atual + rebuild + espera a API ficar saudável
 ```
 
-`BRANCH=main ./scripts/deploy.sh` troca para outra branch. As migrations novas rodam
+Produção acompanha a `main`. `BRANCH=outra-branch ./scripts/deploy.sh` publica outra branch (para testar algo antes do merge). As migrations novas rodam
 sozinhas quando o backend sobe.
 
 ### 4.5 Backup
