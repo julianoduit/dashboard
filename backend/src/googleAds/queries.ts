@@ -8,8 +8,9 @@ function assertDate(d: string): string {
 }
 
 /**
- * Sem filtro de nível: a MCC da Dúit tem sub-MCCs (até o nível 3) e `level <= 1` deixava de fora
- * as contas abaixo delas. Managers e contas canceladas são filtrados em isSelectableClient.
+ * Só as contas ligadas direto à MCC raiz. As sub-MCCs (ex.: "Clientes - Dúit Marketing") e as
+ * contas abaixo delas ficam de fora por decisão da Dúit. Managers e contas canceladas são
+ * filtrados em isSelectableClient.
  */
 export const mccClientsQuery = `
   SELECT
@@ -20,7 +21,8 @@ export const mccClientsQuery = `
     customer_client.manager,
     customer_client.status,
     customer_client.level
-  FROM customer_client`;
+  FROM customer_client
+  WHERE customer_client.level <= 1`;
 
 export function campaignDailyQuery(inicio: string, fim: string): string {
   return `

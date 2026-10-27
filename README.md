@@ -45,5 +45,6 @@ painel do Google Ads (Impr., Cliques, Custo, Conversões, Valor conv.), para con
 - Advisory lock por conta impede duas sincronizações simultâneas da mesma conta.
 - Retry com backoff exponencial + jitter para cota (respeita o `retryDelay` da API), 5xx e rede.
 - Cada execução fica em `sync_runs`; erro em uma conta não interrompe as demais.
-- A lista da MCC percorre a hierarquia inteira (a MCC da Dúit tem sub-MCCs até o nível 3);
-  contas manager e canceladas/encerradas ficam de fora.
+- A lista da MCC considera só as contas ligadas direto à MCC raiz (`level <= 1`). Contas dentro
+  de sub-MCCs, como "Clientes - Dúit Marketing", ficam de fora de propósito, assim como contas
+  manager e canceladas/encerradas.
