@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 36" role="img" aria-label="Dúit Marketing">
+  <style>
+    .t { fill: #0b0b0b; }
+    @media (prefers-color-scheme: dark) { .t { fill: #f0efec; } }
+  </style>
+  <text class="t" x="0" y="27" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="28" font-weight="700" letter-spacing="-1">dúit</text>
+  <circle cx="62" cy="23.5" r="3.5" fill="#3987e5"/>
+</svg>

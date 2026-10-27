@@ -31,6 +31,42 @@ npm run gaql -- --customer-id=1234567890 "SELECT customer.id FROM customer"   # 
 O `report` imprime totais da conta, por campanha e por ação de conversão, no mesmo recorte do
 painel do Google Ads (Impr., Cliques, Custo, Conversões, Valor conv.), para conferência.
 
+## Rodando o sistema (backend + frontend)
+
+```bash
+# 1. Crie o primeiro admin (a senha é pedida no terminal)
+cd backend
+npm run seed:admin -- --email=voce@duit.com.br --nome="Seu Nome"
+
+# 2. Suba a API (porta 3000). SYNC_SCHEDULER_ENABLED=false no .env evita o sync automático em dev.
+npm run dev
+
+# 3. Em outro terminal, suba o frontend (porta 5173, com proxy de /api para a 3000)
+cd frontend
+npm install
+npm run dev
+```
+
+Abra http://localhost:5173 e entre com o admin. Até a tela de admin (Fase 4) ficar pronta, um
+usuário cliente pode ser criado pela API, logado como admin:
+
+```bash
+curl -c /tmp/admin.jar -H 'content-type: application/json' \
+  -d '{"email":"voce@duit.com.br","senha":"SUA_SENHA"}' http://localhost:3000/api/auth/login
+curl -b /tmp/admin.jar -H 'content-type: application/json' \
+  -d '{"nome":"Cliente","email":"cliente@empresa.com","senha":"senha-do-cliente","accountIds":[ID_DA_CONTA]}' \
+  http://localhost:3000/api/admin/users
+```
+
+`ID_DA_CONTA` é o `id` interno da tabela `ad_accounts` (não o customer ID do Google).
+
+## Testes
+
+```bash
+cd backend && npm test     # unitários + integração (acesso entre clientes, auth, sync, métricas)
+cd frontend && npm test    # formatação pt-BR e presets de período
+```
+
 ## Como o sync funciona
 
 - Período no fuso da conta, terminando **ontem** (o dia corrente fica de fora para não congelar
