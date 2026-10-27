@@ -10,10 +10,19 @@ COMPOSE="docker compose -f docker-compose.prod.yml"
 
 [ -f .env ] || { echo "Falta o arquivo .env (copie de .env.example e preencha)"; exit 1; }
 
-echo "==> Atualizando código ($BRANCH)"
-git fetch origin "$BRANCH"
-git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+if [ -z "${DEPLOY_JA_ATUALIZADO:-}" ]; then
+  echo "==> Atualizando código ($BRANCH)"
+  antes=$(git hash-object "$0")
+  git fetch origin "$BRANCH"
+  git checkout "$BRANCH"
+  git pull --ff-only origin "$BRANCH"
+  # O bash continua lendo a versão antiga deste arquivo: se o pull trouxe uma versão nova
+  # do deploy.sh, reinicia com ela (sem repetir o pull).
+  if [ "$(git hash-object "$0")" != "$antes" ]; then
+    echo "==> deploy.sh mudou; reiniciando com a versão nova"
+    DEPLOY_JA_ATUALIZADO=1 exec "$0" "$@"
+  fi
+fi
 
 # Rede compartilhada com o KiipitADS (API interna do dashboard).
 docker network inspect duit-interno >/dev/null 2>&1 || docker network create duit-interno >/dev/null
