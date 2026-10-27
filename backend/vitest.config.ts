@@ -16,6 +16,11 @@ export default defineConfig({
       GOOGLE_ADS_LOGIN_CUSTOMER_ID: '1112223333',
       JWT_SECRET: 'test-secret-test-secret-test-secret-123',
       SYNC_SCHEDULER_ENABLED: 'false',
+      INTERNAL_API_TOKEN: 'token-interno-de-teste-com-mais-de-32-chars',
+      PUBLIC_URL: 'https://dashboard.teste',
+      KIIPITADS_URL: 'https://kiipitads.teste',
+      // Os testes existentes entram como admin por senha; o bloqueio tem teste próprio.
+      ADMIN_PASSWORD_LOGIN: 'true',
     },
     // Os testes de integração compartilham o mesmo banco de teste.
     fileParallelism: false,

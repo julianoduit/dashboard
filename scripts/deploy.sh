@@ -15,6 +15,9 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
+# Rede compartilhada com o KiipitADS (API interna do dashboard).
+docker network inspect duit-interno >/dev/null 2>&1 || docker network create duit-interno >/dev/null
+
 echo "==> Construindo e subindo containers"
 $COMPOSE up -d --build --remove-orphans
 

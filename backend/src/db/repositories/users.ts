@@ -2,6 +2,10 @@ import { getPool, type Queryable } from '../pool.js';
 
 export type Papel = 'admin' | 'cliente';
 
+/** Usuário técnico das sessões abertas pelo KiipitADS (login único). Não tem senha. */
+export const SERVICE_USER_EMAIL = 'kiipitads@servico.interno';
+const SERVICE_USER_NOME = 'Equipe Dúit (KiipitADS)';
+
 export interface User {
   id: number;
   nome: string;
@@ -32,7 +36,9 @@ export async function list(db: Queryable = getPool()): Promise<Array<User & { co
     `SELECT u.id, u.nome, u.email::text AS email, u.papel, u.ativo, u.token_version, u.criado_em,
             coalesce(array_agg(ua.ad_account_id ORDER BY ua.ad_account_id) FILTER (WHERE ua.ad_account_id IS NOT NULL), '{}') AS contas
        FROM users u LEFT JOIN user_ad_accounts ua ON ua.user_id = u.id
+      WHERE u.email <> $1
       GROUP BY u.id ORDER BY u.nome`,
+    [SERVICE_USER_EMAIL],
   );
   return res.rows;
 }
@@ -96,4 +102,15 @@ export async function hasAccountAccess(userId: number, accountId: number, db: Qu
     [userId, accountId],
   );
   return res.rows[0]!.ok;
+}
+
+/** Garante o usuário de serviço ativo e admin (recria/reativa se alguém mexeu nele). */
+export async function ensureServiceUser(db: Queryable = getPool()): Promise<User> {
+  const res = await db.query<User>(
+    `INSERT INTO users (nome, email, senha_hash, papel, ativo) VALUES ($1, $2, '!sem-senha', 'admin', TRUE)
+     ON CONFLICT (email) DO UPDATE SET papel = 'admin', ativo = TRUE, senha_hash = '!sem-senha', nome = EXCLUDED.nome
+     RETURNING ${columns}`,
+    [SERVICE_USER_NOME, SERVICE_USER_EMAIL],
+  );
+  return res.rows[0]!;
 }

@@ -7,7 +7,11 @@ const DUMMY_HASH = bcrypt.hashSync('senha-que-nao-existe', COST);
 
 export const hashPassword = (senha: string) => bcrypt.hash(senha, COST);
 
+/** Hash que não é bcrypt (ex.: usuário de serviço, sem senha) nunca confere. */
+const isBcrypt = (h: string | undefined): h is string => !!h && /^\$2[aby]\$\d{2}\$/.test(h);
+
 export async function verifyPassword(senha: string, hash: string | undefined): Promise<boolean> {
-  const ok = await bcrypt.compare(senha, hash ?? DUMMY_HASH);
-  return ok && hash !== undefined;
+  const valido = isBcrypt(hash);
+  const ok = await bcrypt.compare(senha, valido ? hash : DUMMY_HASH);
+  return ok && valido;
 }

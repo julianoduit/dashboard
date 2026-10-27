@@ -1330,3 +1330,8 @@ select {
 .switch--pref input:checked {
   background: var(--data-1);
 }
+
+.admin-nav .admin-nav__voltar {
+  color: var(--data-1);
+  margin-right: 4px;
+}

@@ -19,3 +19,11 @@ export const useDaily = (id?: number, p?: Periodo) => useQuery(metricQuery<Daily
 export const useConversionActions = (id?: number, p?: Periodo) =>
   useQuery(metricQuery<ConversionActions>('conversion-actions', id, p));
 export const useCampaigns = (id?: number, p?: Periodo) => useQuery(metricQuery<Campaigns>('campaigns', id, p));
+
+export interface ConfigPublica {
+  kiipitadsUrl: string | null;
+  adminPasswordLogin: boolean;
+}
+
+export const useConfig = () =>
+  useQuery({ queryKey: ['config'], queryFn: () => api<ConfigPublica>('/config'), staleTime: Infinity });

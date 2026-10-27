@@ -41,6 +41,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      default:
+      # Rede compartilhada com o KiipitADS, que chama a API interna em http://dashboard-api:3000.
+      duit-interno:
+        aliases: [dashboard-api]
     logging: *logging
 
   web:
@@ -74,3 +79,8 @@ services:
 volumes:
   pgdata:
   tsstate:
+
+networks:
+  # Criada uma vez no servidor: docker network create duit-interno (o deploy.sh já faz).
+  duit-interno:
+    external: true

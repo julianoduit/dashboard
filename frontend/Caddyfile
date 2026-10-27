@@ -21,6 +21,11 @@
 		-Server
 	}
 
+	# API interna (KiipitADS) nunca é publicada: só existe na rede Docker duit-interno.
+	handle /api/internal/* {
+		respond 404
+	}
+
 	handle /api/* {
 		reverse_proxy backend:3000
 	}
