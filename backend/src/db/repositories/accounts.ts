@@ -10,13 +10,21 @@ export interface AdAccount {
   status_google: string | null;
   ativo: boolean;
   backfill_concluido: boolean;
+  exibir_roas: boolean;
+  na_mcc: boolean;
   ultima_sync_em: Date | null;
 }
 
-const columns = 'id, customer_id, nome, moeda, fuso, status_google, ativo, backfill_concluido, ultima_sync_em';
+const columns = 'id, customer_id, nome, moeda, fuso, status_google, ativo, backfill_concluido, exibir_roas, na_mcc, ultima_sync_em';
 
-/** Grava/atualiza a lista de contas vinda da MCC. Não altera o campo `ativo` de contas existentes. */
+/**
+ * Grava/atualiza a lista de contas vinda da MCC. Não altera `ativo` de contas existentes.
+ * Contas que não vieram nesta lista ficam com na_mcc = false (nada é apagado).
+ */
 export async function upsertFromMcc(records: MccClientRecord[], db: Queryable = getPool()): Promise<number> {
+  await db.query('UPDATE ad_accounts SET na_mcc = (customer_id = ANY($1::text[])) WHERE na_mcc IS DISTINCT FROM (customer_id = ANY($1::text[]))', [
+    records.map((r) => r.customerId),
+  ]);
   if (!records.length) return 0;
   const res = await db.query(
     `INSERT INTO ad_accounts (customer_id, nome, moeda, fuso, status_google)
@@ -26,6 +34,7 @@ export async function upsertFromMcc(records: MccClientRecord[], db: Queryable = 
        moeda = EXCLUDED.moeda,
        fuso = EXCLUDED.fuso,
        status_google = EXCLUDED.status_google,
+       na_mcc = TRUE,
        atualizado_em = now()`,
     [
       records.map((r) => r.customerId),
@@ -55,6 +64,18 @@ export async function listActive(db: Queryable = getPool()): Promise<AdAccount[]
 
 export async function setActive(id: number, ativo: boolean, db: Queryable = getPool()): Promise<void> {
   await db.query('UPDATE ad_accounts SET ativo = $2, atualizado_em = now() WHERE id = $1', [id, ativo]);
+}
+
+export async function updateFlags(
+  id: number,
+  flags: Partial<{ ativo: boolean; exibirRoas: boolean }>,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE ad_accounts SET ativo = coalesce($2, ativo), exibir_roas = coalesce($3, exibir_roas), atualizado_em = now()
+      WHERE id = $1`,
+    [id, flags.ativo ?? null, flags.exibirRoas ?? null],
+  );
 }
 
 export async function markSynced(id: number, backfillConcluido: boolean, db: Queryable = getPool()): Promise<void> {

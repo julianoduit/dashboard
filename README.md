@@ -47,18 +47,15 @@ npm install
 npm run dev
 ```
 
-Abra http://localhost:5173 e entre com o admin. Até a tela de admin (Fase 4) ficar pronta, um
-usuário cliente pode ser criado pela API, logado como admin:
+Abra http://localhost:5173 e entre com o admin. Pela tela de admin:
 
-```bash
-curl -c /tmp/admin.jar -H 'content-type: application/json' \
-  -d '{"email":"voce@duit.com.br","senha":"SUA_SENHA"}' http://localhost:3000/api/auth/login
-curl -b /tmp/admin.jar -H 'content-type: application/json' \
-  -d '{"nome":"Cliente","email":"cliente@empresa.com","senha":"senha-do-cliente","accountIds":[ID_DA_CONTA]}' \
-  http://localhost:3000/api/admin/users
-```
-
-`ID_DA_CONTA` é o `id` interno da tabela `ad_accounts` (não o customer ID do Google).
+- **Contas:** "Atualizar lista da MCC" traz as contas; o interruptor "Sincronizar" ativa a conta
+  (a primeira sincronização faz a carga de 13 meses); "Valor/ROAS" liga ou desliga o card de valor
+  de conversão e a coluna ROAS para o cliente (desligue em contas de lead com valor padrão).
+  Contas que saíram da MCC aparecem marcadas como "Fora da MCC".
+- **Usuários:** criar cliente, gerar senha, vincular contas, desativar ou excluir.
+  "Ver como cliente" abre exatamente a tela que o cliente vê.
+- **Sincronizações:** histórico com filtro por status e conta, e a mensagem de erro de cada falha.
 
 ## Testes
 

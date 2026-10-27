@@ -65,9 +65,13 @@ export function adminRouter(deps: { googleAds: () => SearchClient }): Router {
 
   router.patch('/accounts/:id', async (req, res) => {
     const id = idParam.parse(req.params.id);
-    const { ativo } = z.object({ ativo: z.boolean() }).parse(req.body);
+    const flags = z
+      .object({ ativo: z.boolean(), exibirRoas: z.boolean() })
+      .partial()
+      .refine((v) => Object.keys(v).length > 0, 'nada para atualizar')
+      .parse(req.body);
     if (!(await accounts.findById(id))) throw notFound('Conta não encontrada');
-    await accounts.setActive(id, ativo);
+    await accounts.updateFlags(id, flags);
     res.json(await accounts.findById(id));
   });
 

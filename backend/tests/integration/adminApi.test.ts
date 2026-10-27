@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closePool, getPool } from '../../src/db/pool.js';
 import { createAccount, resetDb } from '../helpers/db.js';
-import { createUser, loginAs, makeApp } from '../helpers/app.js';
+import { createUser, insertCampaignDay, loginAs, makeApp } from '../helpers/app.js';
 import { campaignRow } from '../helpers/fakeGoogleAds.js';
 
 async function waitFor(fn: () => Promise<boolean>, timeoutMs = 5000) {
@@ -86,5 +86,54 @@ describe('API de admin', () => {
     });
     const runs = await ad.get(`/api/admin/sync-runs?accountId=${conta}`);
     expect(runs.body[0]).toMatchObject({ tipo: 'manual', status: 'sucesso', disparado_por_nome: 'Usuário' });
+  });
+
+  it('chave "exibir ROAS" esconde valor de conversão e ROAS do cliente', async () => {
+    const { app } = makeApp();
+    const conta = await createAccount();
+    await insertCampaignDay(conta, '2026-10-20', { impressions: 10, clicks: 2, cost: 50, conversions: 5, value: 5 });
+    const admin = await createUser({ papel: 'admin' });
+    const cli = await createUser({ contas: [conta] });
+    const ad = await loginAs(app, admin.email);
+    const ca = await loginAs(app, cli.email);
+    const Q = '?inicio=2026-10-20&fim=2026-10-20';
+
+    let r = await ca.get(`/api/accounts/${conta}/summary${Q}`);
+    expect(r.body.temValorConversao).toBe(true);
+    expect(r.body.atual.roas).toBeCloseTo(0.1);
+
+    expect((await ad.patch(`/api/admin/accounts/${conta}`).send({ exibirRoas: false })).body.exibir_roas).toBe(false);
+    r = await ca.get(`/api/accounts/${conta}/summary${Q}`);
+    expect(r.body.temValorConversao).toBe(false);
+    expect(r.body.atual.roas).toBeNull();
+    const camp = await ca.get(`/api/accounts/${conta}/campaigns${Q}`);
+    expect(camp.body.temValorConversao).toBe(false);
+    expect(camp.body.campanhas[0].atual.roas).toBeNull();
+
+    // A chave não mexe no "ativo".
+    expect((await ad.get('/api/admin/accounts')).body[0]).toMatchObject({ ativo: true, exibir_roas: false });
+    expect((await ad.patch(`/api/admin/accounts/${conta}`).send({})).status).toBe(400);
+  });
+
+  it('conta que some da lista da MCC fica marcada, sem perder dados nem vínculo', async () => {
+    const { app, fake } = makeApp();
+    const mcc = (ids: string[]) => async <T>() =>
+      ids.map((id) => ({ customerClient: { id, descriptiveName: `Conta ${id}`, currencyCode: 'BRL', timeZone: 'America/Sao_Paulo', status: 'ENABLED' } })) as T[];
+    const admin = await createUser({ papel: 'admin' });
+    const ad = await loginAs(app, admin.email);
+
+    fake.searchStream = mcc(['3000000001', '3000000002']);
+    await ad.post('/api/admin/accounts/refresh-mcc');
+    fake.searchStream = mcc(['3000000001']);
+    await ad.post('/api/admin/accounts/refresh-mcc');
+
+    const list = (await ad.get('/api/admin/accounts')).body as Array<{ customer_id: string; na_mcc: boolean }>;
+    expect(Object.fromEntries(list.map((a) => [a.customer_id, a.na_mcc]))).toEqual({ '3000000001': true, '3000000002': false });
+
+    // Voltou para a MCC: a marcação some.
+    fake.searchStream = mcc(['3000000001', '3000000002']);
+    await ad.post('/api/admin/accounts/refresh-mcc');
+    const again = (await ad.get('/api/admin/accounts')).body as Array<{ na_mcc: boolean }>;
+    expect(again.every((a) => a.na_mcc)).toBe(true);
   });
 });

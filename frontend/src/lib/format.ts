@@ -81,3 +81,29 @@ export function dataHora(ts: string | null | undefined, timeZone = 'America/Sao_
   const hora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone }).format(d);
   return `${data} às ${hora}`;
 }
+
+/** 3552962784 -> 355-296-2784 (formato do painel do Google Ads). */
+export function customerId(id: string): string {
+  return id.length === 10 ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id;
+}
+
+/** Tempo relativo curto: "há 5 min", "há 3 h", "há 2 dias". */
+export function tempoRelativo(ts: string | null | undefined, now = Date.now()): string {
+  if (!ts) return VAZIO;
+  const s = Math.max(0, Math.round((now - new Date(ts).getTime()) / 1000));
+  if (s < 60) return 'agora há pouco';
+  const min = Math.round(s / 60);
+  if (min < 60) return `há ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'há 1 dia' : `há ${d} dias`;
+}
+
+/** Duração entre dois timestamps: "8 s", "2 min 5 s". */
+export function duracao(inicio: string, fim: string | null): string {
+  if (!fim) return VAZIO;
+  const s = Math.max(0, Math.round((new Date(fim).getTime() - new Date(inicio).getTime()) / 1000));
+  if (s < 60) return `${s} s`;
+  return `${Math.floor(s / 60)} min ${s % 60} s`;
+}

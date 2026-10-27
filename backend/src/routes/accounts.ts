@@ -26,6 +26,11 @@ function lerPeriodo(req: Request, account: AdAccount): { atual: Periodo; anterio
   return { atual, anterior: periodoAnterior(atual) };
 }
 
+/** Valor de conversão e ROAS aparecem só se a conta registra valor e o admin não desligou. */
+async function mostrarValor(account: AdAccount): Promise<boolean> {
+  return account.exibir_roas && (await reports.temValorConversao(account.id));
+}
+
 function contaPublica(a: AdAccount) {
   return { id: a.id, nome: a.nome, moeda: a.moeda, fuso: a.fuso, ultimaSyncEm: a.ultima_sync_em };
 }
@@ -51,7 +56,7 @@ export function accountsRouter(): Router {
     const [ta, tp, temValor] = await Promise.all([
       reports.totais(account.id, periodos.atual),
       reports.totais(account.id, periodos.anterior),
-      reports.temValorConversao(account.id),
+      mostrarValor(account),
     ]);
     const atual = derive(ta, { temValorConversao: temValor });
     const anterior = derive(tp, { temValorConversao: temValor });
@@ -120,7 +125,7 @@ export function accountsRouter(): Router {
     const [la, lp, temValor] = await Promise.all([
       reports.porCampanha(account.id, periodos.atual),
       reports.porCampanha(account.id, periodos.anterior),
-      reports.temValorConversao(account.id),
+      mostrarValor(account),
     ]);
     const anteriorPorId = new Map(lp.map((c) => [c.campaignId, c]));
     const pick = (c: Totais): Totais => ({

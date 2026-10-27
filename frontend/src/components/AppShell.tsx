@@ -3,11 +3,12 @@ import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 
 export function AppShell({ children, nav }: { children: ReactNode; nav?: ReactNode }) {
+  const classe = nav ? 'topbar__inner topbar__inner--admin' : 'topbar__inner';
   const { usuario, logout } = useAuth();
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="topbar__inner">
+        <div className={classe}>
           <Link to="/" className="brand" aria-label="Início">
             <img src="/brand/logo.svg" alt="Dúit Marketing" />
           </Link>
